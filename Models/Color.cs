@@ -1,38 +1,44 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Canvas.Net.Models;
-
-public class CanvasColor
+namespace JSONCanvasDotNet.Models
 {
-    public CanvasColor(string value)
+    public class CanvasColor
     {
-        color = value;
+        public CanvasColor(string value)
+        {
+            this.color = value;
+        }
+
+        public CanvasColor(int preset)
+        {
+            this.color = preset.ToString();
+        }
+
+        [JsonInclude]
+        public string color;
     }
 
-    public CanvasColor(int preset)
+    public class CanvasColorJsonConverter : JsonConverter<CanvasColor>
     {
-        color = preset.ToString();
+        public override CanvasColor Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options
+        )
+        {
+            return new CanvasColor(reader.GetString()!);
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            CanvasColor canvasColor,
+            JsonSerializerOptions options
+        )
+        {
+            writer.WriteStringValue(canvasColor.color);
+        }
+
     }
 
-    [JsonInclude]
-    public string color;   
-}
-public class CanvasColorJsonConverter : JsonConverter<CanvasColor>
-{
-    public override CanvasColor Read(
-        ref Utf8JsonReader reader,
-        Type typeToConvert,
-        JsonSerializerOptions options)
-    {
-        return new CanvasColor(reader.GetString()!);
-    }
-
-    public override void Write(
-        Utf8JsonWriter writer,
-        CanvasColor canvasColor,
-        JsonSerializerOptions options)
-    {
-        writer.WriteStringValue(canvasColor.color);
-    }
 }
