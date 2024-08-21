@@ -1,7 +1,9 @@
 using System.Drawing;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Xml.Linq;
 
 
 namespace JSONCanvasDotNet.Models
@@ -43,13 +45,25 @@ namespace JSONCanvasDotNet.Models
         #region JSON fields
 
         [JsonInclude]
-        public string id { get; set; }
+        public string id
+        {
+            get;
+            set;
+        }
 
         [JsonInclude]
-        public int x { get; set; }
+        public int x
+        {
+            get;
+            set;
+        }
 
         [JsonInclude]
-        public int y { get; set; }
+        public int y
+        {
+            get;
+            set;
+        }
 
         [JsonInclude]
         public int width { get; set; }
@@ -65,10 +79,25 @@ namespace JSONCanvasDotNet.Models
         #region Object Reference Fields
 
         [JsonIgnore]
-        public List<Edge> Edges { get; set; }
+        public List<Edge> Edges
+        {
+            get;
+            set;
+        }
 
         [JsonIgnore]
-        public GroupNode? parentNode { get; set; }
+        public GroupNode? parentNode
+        {
+            get;
+            set;
+        }
+
+        [JsonIgnore]
+        public Canvas? Canvas
+        {
+            get;
+            set;
+        }
 
         #endregion
 
@@ -253,6 +282,11 @@ namespace JSONCanvasDotNet.Models
 
         }
 
+        public bool IsInGroup(GroupNode group)
+        {
+            return group.Contains(this);
+        }
+
         public bool OverlapsNode(Node targetNode)
         {
             return Node.DoesNodeOverlapNode(this, targetNode);
@@ -374,10 +408,7 @@ namespace JSONCanvasDotNet.Models
 
         public static bool DoesNodeOverlapNode(Node firstNode, Node secondNode)
         {
-            if (
-                firstNode.boundingBox.IntersectsWith(secondNode.boundingBox) ||
-                secondNode.boundingBox.IntersectsWith(firstNode.boundingBox)
-            )
+            if (firstNode.boundingBox.IntersectsWith(secondNode.boundingBox))
             {
                 return true;
             }
@@ -409,7 +440,11 @@ namespace JSONCanvasDotNet.Models
 
         [JsonInclude]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? text { get; set; }
+        public string? text
+        {
+            get;
+            set;
+        }
 
     }
 
@@ -436,11 +471,19 @@ namespace JSONCanvasDotNet.Models
         }
 
         [JsonInclude]
-        public string file { get; set; }
+        public string file
+        {
+            get;
+            set;
+        }
 
         [JsonInclude]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? subpath { get; set; }
+        public string? subpath
+        {
+            get;
+            set;
+        }
 
     }
 
@@ -465,7 +508,11 @@ namespace JSONCanvasDotNet.Models
         }
 
         [JsonInclude]
-        public string url { get; set; }
+        public string url
+        {
+            get;
+            set;
+        }
 
     }
 
@@ -493,7 +540,7 @@ namespace JSONCanvasDotNet.Models
             this.background = nodeBackground;
             this.backgroundStyle = nodeBackgroundStyle;
 
-            this.nodes = new List<Node>();
+            this.children = new List<Node>();
         }
 
         [JsonInclude]
@@ -509,7 +556,202 @@ namespace JSONCanvasDotNet.Models
         public GroupNodeBackgroundStyle? backgroundStyle;
 
         [JsonIgnore]
-        public List<Node> nodes;
+        public List<Node> children
+        {
+            get;
+        }
+
+        public void AddChildNode(Node node, bool updateChildPosition = true)
+        {
+            if (this.Canvas == null && updateChildPosition)
+            {
+                throw new InvalidOperationException("Group Nodes must be on a Canvas to update a child node's position");
+            }
+
+            this.children.Add(node);
+
+            node.parentNode = this;
+            node.Canvas = this.Canvas;
+        }
+
+        public bool Contains(Node node)
+        {
+            return this.children.Contains(node);
+        }
+
+        public List<Node> ChildrenOverlappingBoundary(Rectangle proposedBoundingBox, bool ignoreGroupNodes = false)
+        {
+            List<Node> nodesOverlapping = new List<Node>();
+            foreach (var node in this.children)
+            {
+                if (ignoreGroupNodes && node is GroupNode)
+                {
+                    continue;
+                }
+
+                if (node.boundingBox.IntersectsWith(proposedBoundingBox))
+                {
+                    nodesOverlapping.Add(node);
+                }
+
+            }
+
+            return nodesOverlapping;
+        }
+
+        public static Tuple<int, int> FindSpaceInGroupForNode(GroupNode parent, Node child)
+        {
+            // Group Nodes contain other Nodes by virtue of their bounding box enclosing
+            // the other Node (and also being earlier in the List of Nodes in the Canvas, but
+            // we don't control that here)
+
+            // If the child node doesn't overlap with the parent group node, we need to do *math*
+            // and figure out where to put it
+            // We also want to avoid overlapping with other nodes, since it'll be disruptive
+            // visually _and_ we could accidentally place it into another Group Node
+            if (parent.OverlapsNode(child))
+            {
+                return child.topLeft;
+            }
+
+            List<Node> overlappingNodes = new List<Node>();
+            
+            // Add a small margin of 8 units
+            int proposedNewY = parent.top + 8;
+            int proposedNewX = parent.left + 8;
+
+            Rectangle proposedBoundingBox = new Rectangle(proposedNewX, proposedNewY, child.width, child.height);
+            bool nodePlaced = false;
+
+            while (!nodePlaced)
+            {
+                proposedBoundingBox.X = proposedNewX;
+                proposedBoundingBox.Y = proposedNewY;
+
+                // Get any Nodes that overlap with our proposed bounding box
+                overlappingNodes = parent.ChildrenOverlappingBoundary(proposedBoundingBox);
+                    
+                // We win!
+                if (overlappingNodes.Count == 0)
+                {
+                    nodePlaced = true;
+                    continue;
+                }
+
+                // We didn't win
+                // So, we scoot to the right and try again
+                else
+                {
+                    // Of course, we have > 0 Nodes and one of them has a right side
+                    // that is farther than the rest
+                    Node farthestRightNode = overlappingNodes.First();
+                    int farthestRightPosition = int.MinValue;
+                        
+                    // So we do a simple loop to find the max X position of the overlapping nodes
+                    // We can't guarantee that the vertical position is relevant
+                    // i.e., one of the overlapping nodes could be above or below the center
+                    // of the proposed bounding box, but we don't know if using one of their Y positions
+                    // is useful. e.g., there could be a solution that is down from our current position
+                    // but to the left of an overlapping node
+                    // this is why we ignore the Y positions: we wouldn't want to jump over a possible
+                    // (or potentially only) solution
+                    foreach (var overlappingNode in overlappingNodes)
+                    {
+                        if (overlappingNode.right > farthestRightPosition)
+                        {
+                            farthestRightPosition = overlappingNode.right;
+                            farthestRightNode = overlappingNode;
+                        }
+                    }
+
+                    // Now all we do is use the furthest right position and add a small margin
+                    proposedNewX = farthestRightNode.right + 8;
+                }
+
+                // If we've hit the right end of the Group Node
+                // wrap around and bump down
+                if (proposedNewX + child.width > parent.right + 8)
+                {
+                    proposedNewY += 8;
+                    proposedNewX = parent.left + 8;
+                }
+
+                // We've reached the bottom
+                // This means (if we've done everything right) there is no gap that can fit the node within the existing Group's
+                // boundary box
+                // We need to expand the Group Node to accomodate
+                if (proposedNewY + child.height > parent.bottom + 8)
+                {
+                    // We're going to aim for maintaining the current ratio of width to height
+                    // The Group Node presumably has its current size for a reason
+                    // and while we're expanding it to make room, we want to make sure its
+                    // shape is preserved
+                    var sizeRatio = (double)parent.width / (double)parent.height;
+
+                    // We'll increase the height
+                    var newHeight = parent.height + child.height + 16;
+
+                    // we're converting double to int and will lose some precision but it's fine for now
+                    var newWidth = (int)(sizeRatio * newHeight);
+
+                    // However we can try to be clever and predict if the node will fit in the new width
+                    // after adjusting to maintain the ratio
+                    var addedWidth = newWidth - parent.width;
+
+                    // If the ratio created width to accomodate the child, we can put it in that column
+                    // and start from the top
+                    if (addedWidth > child.width + 16)
+                    {
+                        // parent.right is the current right border, before adding the new width
+                        proposedNewX = parent.right + 8;
+                        proposedNewY = parent.top + 8;
+                    }
+                    else
+                    {
+                        proposedNewX = parent.left + 8;
+                        proposedNewY = parent.bottom - child.height - 8;
+                    }
+
+                    nodePlaced = true;
+                    continue;
+                }
+
+            }
+
+            return new Tuple<int, int>(proposedNewX, proposedNewY);
+
+        }
+
+        public void ResizeForNode(Node node)
+        {
+            // We're going to aim for maintaining our current ratio of width to height
+            // The current Group Node presumably has its current size for a reason
+            // and while we're expanding it to make room, we want to make sure its
+            // shape is preserved
+            var sizeRatio = (double)this.width / (double)this.height;
+
+            // We'll increase the height
+            this.height += node.height + 16;
+            // Then use the ratio to determine the new width
+            this.width = (int)(sizeRatio * this.height);
+        }
+
+        public void CheckChildNodes()
+        {
+            foreach (var node in this.children)
+            {
+                if (!node.OverlapsNode(this) ||
+                    node.x > this.right ||
+                    node.y > this.bottom ||
+                    node.x < this.left ||
+                    node.y < this.top
+                )
+                {
+
+                }
+            }
+        }
+
     }
 
     public class GroupNodeBackgroundStyle

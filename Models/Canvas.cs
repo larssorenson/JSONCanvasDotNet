@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+﻿using System.Drawing;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace JSONCanvasDotNet.Models
@@ -8,70 +9,75 @@ namespace JSONCanvasDotNet.Models
     {
         public Canvas(List<Node>? existingNodes = null, List<Edge>? existingEdges = null)
         {
-            Nodes = existingNodes ?? new List<Node>();
+            this.Nodes = existingNodes ?? new List<Node>();
 
-            foreach (var node in Nodes)
+            foreach (var node in this.Nodes)
             {
-                if (nodeLookup.ContainsKey(node.id))
+                if (this.nodeLookup.ContainsKey(node.id))
                 {
                     throw new ArgumentException(string.Format("Two nodes have the same ID! Node IDs must be unique. {0}", node.id));
                 }
 
-                nodeLookup[node.id] = node;
+                this.nodeLookup[node.id] = node;
+                node.Canvas = this;
             }
 
-            Edges = existingEdges ?? new List<Edge>();
+            this.Edges = existingEdges ?? new List<Edge>();
+
             foreach (var edge in Edges)
             {
-                if (!nodeLookup.ContainsKey(edge.fromNodeId))
+                if (!this.nodeLookup.ContainsKey(edge.fromNodeId))
                 {
                     throw new ArgumentException(string.Format("Edge begins from non-existent Node {0}", edge.fromNode));
                 }
 
-                if (!nodeLookup.ContainsKey(edge.toNodeId))
+                if (!this.nodeLookup.ContainsKey(edge.toNodeId))
                 {
                     throw new ArgumentException(string.Format("Edge goes to non-existent Node {0}", edge.toNode));
                 }
 
-                if (edgeLookup.ContainsKey(edge.id))
+                if (this.edgeLookup.ContainsKey(edge.id))
                 {
                     throw new ArgumentException(string.Format("Two edges have the same ID! Edge IDs must be unique. {0}", edge.id));
                 }
 
-                edgeLookup[edge.id] = edge;
+                this.edgeLookup[edge.id] = edge;
             }
 
         }
 
         public void AddNode(Node newNode)
         {
-            if (nodeLookup.ContainsKey(newNode.id))
+            if (this.nodeLookup.ContainsKey(newNode.id))
             {
                 throw new ArgumentException(string.Format("Node already exists with new Node's ID! Node IDs must be unique. {0}", newNode.id));
             }
 
-            nodeLookup[newNode.id] = newNode;
-            Nodes.Add(newNode);
+            this.nodeLookup[newNode.id] = newNode;
+
+            this.Nodes.Add(newNode);
+            newNode.Canvas = this;
         }
 
         public void AddNodes(List<Node> newNodes)
         {
             foreach (var node in newNodes)
             {
-                if (nodeLookup.ContainsKey(node.id))
+                if (this.nodeLookup.ContainsKey(node.id))
                 {
                     throw new ArgumentException(string.Format("Two nodes have the same ID! Node IDs must be unique. {0}", node.id));
                 }
 
-                nodeLookup[node.id] = node;
+                this.nodeLookup[node.id] = node;
+                node.Canvas = this;
             }
 
-            Nodes.AddRange(newNodes);
+            this.Nodes.AddRange(newNodes);
         }
 
         public void AddEdge(Edge newEdge)
         {
-            if (edgeLookup.ContainsKey(newEdge.id))
+            if (this.edgeLookup.ContainsKey(newEdge.id))
             {
                 throw new ArgumentException(string.Format("Two edges have the same ID! Edge IDs must be unique. {0}", newEdge.id));
             }
@@ -86,8 +92,10 @@ namespace JSONCanvasDotNet.Models
                 throw new ArgumentException(string.Format("Edge goes to non-existent Node {0}", newEdge.toNode));
             }
 
-            edgeLookup[newEdge.id] = newEdge;
-            Edges.Add(newEdge);
+            this.edgeLookup[newEdge.id] = newEdge;
+
+            this.Edges.Add(newEdge);
+
             newEdge.fromNode.Edges.Add(newEdge);
             newEdge.toNode.Edges.Add(newEdge);
         }
@@ -111,13 +119,52 @@ namespace JSONCanvasDotNet.Models
                     throw new ArgumentException(string.Format("Edge goes to non-existent Node {0}", edge.toNode));
                 }
 
-                edgeLookup[edge.id] = edge;
+                this.edgeLookup[edge.id] = edge;
 
                 edge.fromNode.Edges.Add(edge);
                 edge.toNode.Edges.Add(edge);
             }
 
-            Edges.AddRange(newEdges);
+            this.Edges.AddRange(newEdges);
+        }
+
+        public Node? GetNodeAtCoordinates(int x, int y, bool ignoreGroupNodes = false)
+        {
+            foreach (var node in this.Nodes)
+            {
+                if (ignoreGroupNodes && node is GroupNode)
+                {
+                    continue;
+                }
+
+                if (node.boundingBox.Contains(x, y))
+                {
+                    return node;
+                }
+
+            }
+
+            return null;
+        }
+
+        public List<Node> NodesOverlappingBoundary(Rectangle proposedBoundingBox, bool ignoreGroupNodes = false)
+        {
+            List<Node> nodesOverlapping = new List<Node>(); 
+            foreach (var node in this.Nodes)
+            {
+                if (ignoreGroupNodes && node is GroupNode)
+                {
+                    continue;
+                }
+
+                if (node.boundingBox.IntersectsWith(proposedBoundingBox))
+                {
+                    nodesOverlapping.Add(node);
+                }
+
+            }
+
+            return nodesOverlapping;
         }
 
         private Dictionary<string, Node> nodeLookup = new Dictionary<string, Node>();

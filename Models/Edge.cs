@@ -145,7 +145,21 @@ namespace JSONCanvasDotNet.Models
             }
 
             List<EdgeSide> fromEdgeSidesToIgnore = new List<EdgeSide>(Edge.allEdgeSides.Count);
+            foreach (var edge in sourceNode.Edges)
+            {
+                if (edge.fromSide != null)
+                {
+                    fromEdgeSidesToIgnore.Add(edge.fromSide);
+                }
+            }
             List<EdgeSide> toEdgeSidesToIgnore = new List<EdgeSide>(Edge.allEdgeSides.Count);
+            foreach (var edge in destinationNode.Edges)
+            {
+                if (edge.toSide != null)
+                {
+                    toEdgeSidesToIgnore.Add(edge.toSide);
+                }
+            }
 
             double shortestDistance = double.MaxValue;
             Tuple<EdgeSide, EdgeSide>? shortestPath = null;
@@ -331,9 +345,9 @@ namespace JSONCanvasDotNet.Models
             toSide = shortestPath.Item2;
 
             var newEdge = new Edge(
-                edgeId ?? Guid.NewGuid().ToString(),
                 sourceNode.id,
                 destinationNode.id,
+                edgeId: edgeId ?? Guid.NewGuid().ToString(),
                 fromEdgeSide: fromSide,
                 fromEdgeEnd: null,
                 toEdgeSide: toSide,
