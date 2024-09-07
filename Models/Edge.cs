@@ -9,16 +9,16 @@ namespace JSONCanvasDotNet.Models
         public Edge(
             string fromNodeId,
             string toNodeId,
-            string? edgeId = null,
+            string? id = null,
             EdgeSide? fromEdgeSide = null,
             EdgeEnd? fromEdgeEnd = null,
             EdgeSide? toEdgeSide = null,
             EdgeEnd? toEdgeEnd = null,
-            CanvasColor? edgeColor = null,
-            string? edgeLabel = null
+            CanvasColor? color = null,
+            string? label = null
         )
         {
-            this.id = edgeId ?? Guid.NewGuid().ToString();
+            this.id = id ?? Guid.NewGuid().ToString();
 
             this.fromNodeId = fromNodeId;
             this.fromSide = fromEdgeSide;
@@ -28,38 +28,37 @@ namespace JSONCanvasDotNet.Models
             this.toSide = toEdgeSide;
             this.toEnd = toEdgeEnd;
 
-            this.color = edgeColor;
-            this.label = edgeLabel;
+            this.color = color;
+            this.label = label;
         }
 
         public Edge(
             Node fromNode,
             Node toNode,
-            string? edgeId = null,
+            string? id = null,
             EdgeSide? fromEdgeSide = null,
             EdgeEnd? fromEdgeEnd = null,
             EdgeSide? toEdgeSide = null,
             EdgeEnd? toEdgeEnd = null,
-            CanvasColor? edgeColor = null,
-            string? edgeLabel = null
+            CanvasColor? color = null,
+            string? label = null
+        ): this(
+            fromNode.id,
+            toNode.id,
+            id: id,
+            fromEdgeSide: fromEdgeSide,
+            fromEdgeEnd: fromEdgeEnd,
+            toEdgeSide: toEdgeSide,
+            toEdgeEnd: toEdgeEnd,
+            color: color,
+            label: label
         )
         {
-            this.id = edgeId ?? Guid.NewGuid().ToString();
-
             this.fromNode = fromNode;
-            this.fromNodeId = fromNode.id;
-            this.fromSide = fromEdgeSide;
-            this.fromEnd = fromEdgeEnd;
             this.fromNode.Edges.Add(this);
 
             this.toNode = toNode;
-            this.toNodeId = toNode.id;
-            this.toSide = toEdgeSide;
-            this.toEnd = toEdgeEnd;
             this.toNode.Edges.Add(this);
-
-            this.color = edgeColor;
-            this.label = edgeLabel;
         }
 
         [JsonInclude]
@@ -109,13 +108,13 @@ namespace JSONCanvasDotNet.Models
 
         [JsonIgnore]
         private static readonly List<EdgeSide> allEdgeSides = new List<EdgeSide>([
-                EdgeSide.top,
+            EdgeSide.top,
             EdgeSide.bottom,
             EdgeSide.left,
             EdgeSide.right
         ]);
 
-        public static Tuple<EdgeSide, EdgeSide> ShortestEdgeSidesBetweenNodeAndNode(
+        public static (EdgeSide fromSide, EdgeSide toSide)? ShortestEdgeSidesBetweenNodeAndNode(
             Node sourceNode,
             Node destinationNode,
             List<EdgeSide>? sourceEdgeSideHints = null,
@@ -162,7 +161,7 @@ namespace JSONCanvasDotNet.Models
             }
 
             double shortestDistance = double.MaxValue;
-            Tuple<EdgeSide, EdgeSide>? shortestPath = null;
+            (EdgeSide fromSide, EdgeSide toSide)? shortestPath = null;
 
             foreach (var fromEdgeSide in fromEdgeSidesToTry)
             {
@@ -191,10 +190,10 @@ namespace JSONCanvasDotNet.Models
                     var toEdgeSidePosition = destinationNode.GetEdgeSidePosition(toEdgeSide);
                     Console.WriteLine($"\tPosition: {toEdgeSidePosition}");
 
-                    var horizontalDistance = (double)fromEdgeSidePosition.Item1 - toEdgeSidePosition.Item1;
+                    var horizontalDistance = (double)fromEdgeSidePosition.X - toEdgeSidePosition.X;
                     Console.WriteLine($"Horizontal Distance: {horizontalDistance}");
 
-                    var verticalDistance = (double)fromEdgeSidePosition.Item2 - toEdgeSidePosition.Item2;
+                    var verticalDistance = (double)fromEdgeSidePosition.Y - toEdgeSidePosition.Y;
                     Console.WriteLine($"Vertical Distance: {verticalDistance}");
 
                     var distance = Math.Sqrt(
@@ -220,7 +219,7 @@ namespace JSONCanvasDotNet.Models
                     if (distance < shortestDistance)
                     {
                         shortestDistance = distance;
-                        shortestPath = new Tuple<EdgeSide, EdgeSide>(fromEdgeSide, toEdgeSide);
+                        shortestPath = new (fromEdgeSide, toEdgeSide);
                         Console.WriteLine($"New shortest path {shortestPath} of {shortestDistance}");
                     }
 
@@ -228,9 +227,17 @@ namespace JSONCanvasDotNet.Models
 
             }
 
+            // On review, I'm wondering how this case could occur
+            // How can we end up with a path that isn't shorter than int.Max?
+            // Two equally sized nodes perfectly overlapping can still have an edge
+            // One node larger than another (e.g., a group node) where one is perfectly encased in the other
+            // can still have an edge
+            // Any other scenarios should produce an edge regardless, even if they're touching on one side
             if (shortestPath == null)
             {
-                Console.WriteLine("No visible shortest path was calculated. Trying again with all options, minus the ignored ones.");
+                throw new Exception("Somehow, there cannot be any path between two nodes.");
+
+                /*Console.WriteLine("No visible shortest path was calculated. Trying again with all options, minus the ignored ones.");
 
                 var newFromEdgeSidesToTry = new List<EdgeSide>(allEdgeSides.Where(edgeSide => !fromEdgeSidesToIgnore.Contains(edgeSide)));
                 var newToEdgeSidesToTry = new List<EdgeSide>(allEdgeSides.Where(edgeSide => !toEdgeSidesToIgnore.Contains(edgeSide)));
@@ -240,7 +247,7 @@ namespace JSONCanvasDotNet.Models
                     destinationNode,
                     sourceEdgeSideHints: newFromEdgeSidesToTry,
                     destinationEdgeSideHints: newToEdgeSidesToTry
-                );
+                );*/
             }
 
             Console.WriteLine($"{shortestPath} wins!");
@@ -262,8 +269,8 @@ namespace JSONCanvasDotNet.Models
 
             Console.WriteLine($"Is source left ({sourceIsToTheLeft}), right ({sourceIsToTheRight}), above ({sourceIsAbove}), or below ({sourceIsBelow})?");
 
-            EdgeSide fromSide;
-            EdgeSide toSide;
+            EdgeSide? fromSide = null;
+            EdgeSide? toSide = null;
             List<EdgeSide> fromSidesToTry = new List<EdgeSide>(Edge.allEdgeSides.Count);
             List<EdgeSide> toSidesToTry = new List<EdgeSide>(Edge.allEdgeSides.Count);
 
@@ -315,12 +322,12 @@ namespace JSONCanvasDotNet.Models
                 toSidesToTry.Add(EdgeSide.top);
             }
 
-            var isNodeTouchingOnEdge = Node.IsNodeTouchingNode(sourceNode, destinationNode);
-            Console.WriteLine($"Is Node Touching on Edge? {isNodeTouchingOnEdge}");
+            var results = Node.IsNodeTouchingNode(sourceNode, destinationNode);
+            Console.WriteLine($"Is Node Touching on an Edge? {results}");
 
-            if (isNodeTouchingOnEdge.Item1)
+            if (results.isTouching)
             {
-                var touchingEdge = isNodeTouchingOnEdge.Item2;
+                var touchingEdge = results.touchingEdge;
 
                 if (touchingEdge != null)
                 {
@@ -332,28 +339,35 @@ namespace JSONCanvasDotNet.Models
 
             // In the case of a Node, e.g., to the left of and below another Node
             // we end up with 2 possible sides to go from or to
-            // This function will return the shortest path of the two which we use to settle
+            // This function will try to return the shortest path of the two which we use to settle
             // between one or the other  
-            var shortestPath = Edge.ShortestEdgeSidesBetweenNodeAndNode(
+            (EdgeSide fromSide, EdgeSide toSide)? shortestPath = Edge.ShortestEdgeSidesBetweenNodeAndNode(
                 sourceNode,
                 destinationNode,
                 sourceEdgeSideHints: fromSidesToTry,
                 destinationEdgeSideHints: toSidesToTry
             );
 
-            fromSide = shortestPath.Item1;
-            toSide = shortestPath.Item2;
+            if (shortestPath.HasValue)
+            {
+                fromSide = shortestPath.Value.fromSide;
+                toSide = shortestPath.Value.toSide;
+            }
+
+            else
+            {
+                throw new Exception("This is odd. I couldn't find a path between the two nodes to connect an edge.");
+            }
 
             var newEdge = new Edge(
-                sourceNode.id,
-                destinationNode.id,
-                edgeId: edgeId ?? Guid.NewGuid().ToString(),
+                fromNode: sourceNode,
+                toNode: destinationNode,
+                id: edgeId,
                 fromEdgeSide: fromSide,
-                fromEdgeEnd: null,
                 toEdgeSide: toSide,
                 toEdgeEnd: EdgeEnd.arrow,
-                edgeColor: edgeColor,
-                edgeLabel: edgeLabel
+                color: edgeColor,
+                label: edgeLabel
             );
 
             sourceNode.Edges.Add(newEdge);

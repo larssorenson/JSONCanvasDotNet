@@ -1,14 +1,10 @@
 using System.Drawing;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using System.Xml.Linq;
 
 
 namespace JSONCanvasDotNet.Models
 {
-
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
     [JsonDerivedType(typeof(TextNode), typeDiscriminator: "text")]
     [JsonDerivedType(typeof(GroupNode), typeDiscriminator: "group")]
@@ -17,29 +13,35 @@ namespace JSONCanvasDotNet.Models
     public class Node
     {
         public Node(
-            int nodeX,
-            int nodeY,
-            int nodeWidth,
-            int nodeHeight,
-            string? nodeId = null
+            int x,
+            int y,
+            int? width = null,
+            int? height = null,
+            string? id = null
         )
         {
-            if (nodeId == null)
-            {
-                this.id = Guid.NewGuid().ToString();
-            }
-            else
-            {
-                this.id = nodeId;
-            }
+            this.id = id ?? Guid.NewGuid().ToString();
 
-            this.x = nodeX;
-            this.y = nodeY;
+            this.x = x;
+            this.y = y;
 
-            this.width = nodeWidth;
-            this.height = nodeHeight;
+            this.width = width ?? Node.DefaultWidth;
+            this.height = height ?? Node.DefaultHeight;
 
             this.Edges = new List<Edge>();
+        }
+
+        public Node(
+            Rectangle boundary,
+            string? id = null
+        ): this(
+            x: boundary.X,
+            y: boundary.Y,
+            width: boundary.Width,
+            height: boundary.Height,
+            id: id
+        )
+        {
         }
 
         #region JSON fields
@@ -51,25 +53,73 @@ namespace JSONCanvasDotNet.Models
             set;
         }
 
+        [JsonIgnore]
+        private int _x;
+
         [JsonInclude]
         public int x
         {
-            get;
-            set;
+            get
+            {
+                return this._x;
+            }
+            set
+            {
+                this._x = value;
+                this.boundary = new Rectangle(this.x, this.y, this.width, this.height);
+            }
         }
+
+        [JsonIgnore]
+        private int _y;
 
         [JsonInclude]
         public int y
         {
-            get;
-            set;
+            get
+            {
+                return this._y;
+            }
+            set
+            {
+                this._y = value;
+                this.boundary = new Rectangle(this.x, this.y, this.width, this.height);
+            }
         }
 
-        [JsonInclude]
-        public int width { get; set; }
+        [JsonIgnore]
+        private int _width;
 
         [JsonInclude]
-        public int height { get; set; }
+        public int width
+        {
+            get
+            {
+                return this._width;
+            }
+            set
+            {
+                this._width = value;
+                this.boundary = new Rectangle(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        [JsonIgnore]
+        private int _height;
+
+        [JsonInclude]
+        public int height
+        {
+            get
+            {
+                return this._height;
+            }
+            set
+            {
+                this._height = value;
+                this.boundary = new Rectangle(this.x, this.y, this.width, this.height);
+            }
+        }
 
         [JsonInclude]
         public CanvasColor? color { get; set; }
@@ -86,10 +136,25 @@ namespace JSONCanvasDotNet.Models
         }
 
         [JsonIgnore]
+        private GroupNode? _parentNode;
+
+        [JsonIgnore]
         public GroupNode? parentNode
         {
-            get;
-            set;
+            get
+            {
+                return this._parentNode;
+            }
+            set
+            {
+                if (this == value)
+                {
+                    throw new Exception("A node cannot be its own parent");
+                }
+
+                this._parentNode = value;
+            }
+
         }
 
         [JsonIgnore]
@@ -98,6 +163,9 @@ namespace JSONCanvasDotNet.Models
             get;
             set;
         }
+
+        [JsonIgnore]
+        public int z = 0;
 
         #endregion
 
@@ -108,7 +176,7 @@ namespace JSONCanvasDotNet.Models
         {
             get
             {
-                return this.y + this.height;
+                return this.boundary.Bottom;
             }
 
         }
@@ -118,7 +186,7 @@ namespace JSONCanvasDotNet.Models
         {
             get
             {
-                return this.y;
+                return this.boundary.Top;
             }
 
         }
@@ -128,7 +196,7 @@ namespace JSONCanvasDotNet.Models
         {
             get
             {
-                return this.x;
+                return this.boundary.Left;
             }
 
         }
@@ -138,117 +206,124 @@ namespace JSONCanvasDotNet.Models
         {
             get
             {
-                return this.x + this.width;
+                return this.boundary.Right;
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> topRight
+        public (int X, int Y) topRight
         {
             get
             {
-                return new Tuple<int, int>(this.right, this.top);
+                return new (this.right, this.top);
             }
             set
             {
-                this.x = value.Item1 - this.width;
-                this.y = value.Item2;
+                this.x = value.X - this.width;
+                this.y = value.Y;
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> bottomRight
+        public (int X, int Y) bottomRight
         {
             get
             {
-                return new Tuple<int, int>(this.right, this.bottom);
+                return new (this.right, this.bottom);
             }
             set
             {
-                this.x = value.Item1 - this.width;
-                this.y = value.Item2 - this.height;
+                this.x = value.X - this.width;
+                this.y = value.Y - this.height;
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> bottomLeft
+        public (int X, int Y) bottomLeft
         {
             get
             {
-                return new Tuple<int, int>(this.left, this.bottom);
+                return new (this.left, this.bottom);
             }
             set
             {
-                this.x = value.Item1;
-                this.y = value.Item2 - this.height;
+                this.x = value.X;
+                this.y = value.Y - this.height;
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> topLeft
+        public (int X, int Y) topLeft
         {
             get
             {
-                return new Tuple<int, int>(this.left, this.top);
+                return new (this.left, this.top);
             }
             set
             {
-                this.x = value.Item1;
-                this.y = value.Item2;
+                this.x = value.X;
+                this.y = value.Y;
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> leftEdgePosition
+        public (int X, int Y) leftEdgePosition
         {
             get
             {
-                return new Tuple<int, int>(this.left, this.top + (this.height / 2));
+                return new (this.left, this.top + (this.height / 2));
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> rightEdgePosition
+        public (int X, int Y) rightEdgePosition
         {
             get
             {
-                return new Tuple<int, int>(this.right, this.top + (this.height / 2));
+                return new (this.right, this.top + (this.height / 2));
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> topEdgePosition
+        public (int X, int Y) topEdgePosition
         {
             get
             {
-                return new Tuple<int, int>(this.left + (this.width / 2), this.top);
+                return new (this.left + (this.width / 2), this.top);
             }
 
         }
 
         [JsonIgnore]
-        public Tuple<int, int> bottomEdgePosition
+        public (int X, int Y) bottomEdgePosition
         {
             get
             {
-                return new Tuple<int, int>(this.left + (this.width / 2), this.bottom);
+                return new (this.left + (this.width / 2), this.bottom);
             }
 
         }
 
         [JsonIgnore]
-        public Rectangle boundingBox
+        private Rectangle _boundary;
+
+        [JsonIgnore]
+        public Rectangle boundary
         {
             get
             {
-                return new Rectangle(this.left, this.top, this.width, this.height);
+                return this._boundary;
+            }
+            set
+            {
+                this._boundary = value;
             }
 
         }
@@ -257,7 +332,48 @@ namespace JSONCanvasDotNet.Models
 
         #region Instance Methods
 
-        public Tuple<int, int> GetEdgeSidePosition(EdgeSide edgeSide)
+        public bool HasAncestor(Node ancestor)
+        {
+            if (ancestor == this.parentNode)
+            {
+                return true;
+            }
+
+            var parentNode = this.parentNode;
+            while (parentNode != null)
+            {
+                parentNode = parentNode.parentNode;
+
+                if (parentNode == ancestor)
+                {
+                    return true;
+                }
+
+            }
+
+            return false;
+
+        }
+
+        public Node GetRoot()
+        {
+            if (this.parentNode == null)
+            {
+                return this;
+            }
+
+            var parentNode = this.parentNode;
+            var lastValidParent = parentNode;
+            while (parentNode != null)
+            {
+                lastValidParent = parentNode;
+                parentNode = parentNode.parentNode;
+            }
+
+            return lastValidParent;
+        }
+
+        public (int X, int Y) GetEdgeSidePosition(EdgeSide edgeSide)
         {
             if (edgeSide.Equals(EdgeSide.bottom))
             {
@@ -284,107 +400,94 @@ namespace JSONCanvasDotNet.Models
 
         public bool IsInGroup(GroupNode group)
         {
-            return group.Contains(this);
+            return group.NodeIsChild(this);
         }
 
-        public bool OverlapsNode(Node targetNode)
+        public bool Overlaps(Node targetNode)
         {
-            return Node.DoesNodeOverlapNode(this, targetNode);
+            return Node.NodesOverlap(this, targetNode);
+        }
+        public bool Overlaps(Rectangle targetBoundary)
+        {
+            return this.boundary.IntersectsWith(targetBoundary);
+        }
+        public bool Contains(Node targetNode)
+        {
+            return this.boundary.Contains(targetNode.boundary);
+        }
+        public bool Contains(Rectangle targetBoundary)
+        {
+            return this.boundary.Contains(targetBoundary);
         }
 
-        public static Tuple<bool, EdgeSide?> IsNodeTouchingNode(Node sourceNode, Node destinationNode)
+        public bool IsTouching(Node targetNode)
         {
-            var bottomTouchingTop = (
-                sourceNode.bottom >= destinationNode.top
-            ) &&
-            (
-                sourceNode.top <= destinationNode.top
-            ) &&
-            (
-                (
-                    sourceNode.right > destinationNode.left &&
-                    sourceNode.right <= destinationNode.right
-                ) ||
-                (
-                    sourceNode.left < destinationNode.right &&
-                    sourceNode.left >= destinationNode.left
-                )
-            );
+            var isTouching = Node.IsNodeTouchingNode(this, targetNode);
 
-            var topTouchingBottom = (
-                sourceNode.top <= destinationNode.bottom
-            ) &&
-            (
-                sourceNode.bottom >= destinationNode.bottom
-            ) &&
-            (
-                (
-                    sourceNode.right > destinationNode.left &&
-                    sourceNode.right <= destinationNode.right
-                ) ||
-                (
-                    sourceNode.left < destinationNode.right &&
-                    sourceNode.left >= destinationNode.left
-                )
-            );
+            return isTouching.Item1;
+        }
 
-            var leftTouchingRight = (
-                sourceNode.left <= destinationNode.right
-            ) &&
-            (
-                sourceNode.right >= destinationNode.right
-            ) &&
-            (
-                (
-                    sourceNode.top < destinationNode.bottom &&
-                    sourceNode.bottom >= destinationNode.bottom
-                ) ||
-                (
-                    sourceNode.bottom > destinationNode.top &&
-                    sourceNode.bottom <= destinationNode.bottom
-                )
-            );
+        public EdgeSide? GetSideTouching(Node targetNode)
+        {
+            var isTouching = Node.IsNodeTouchingNode(this, targetNode);
 
-            var rightTouchingLeft = (
-                sourceNode.right >= destinationNode.left
-            ) &&
-            (
-                sourceNode.left <= destinationNode.left
-            ) &&
-            (
-                (
-                    sourceNode.top <= destinationNode.bottom &&
-                    sourceNode.bottom >= destinationNode.bottom
-                ) ||
-                (
-                    sourceNode.bottom >= destinationNode.top &&
-                    sourceNode.bottom <= destinationNode.bottom
-                )
-            );
-
-            if (bottomTouchingTop)
-            {
-                return new Tuple<bool, EdgeSide?>(true, EdgeSide.bottom);
-            }
-            if (topTouchingBottom)
-            {
-                return new Tuple<bool, EdgeSide?>(true, EdgeSide.top);
-            }
-            if (rightTouchingLeft)
-            {
-                return new Tuple<bool, EdgeSide?>(true, EdgeSide.right);
-            }
-            if (leftTouchingRight)
-            {
-                return new Tuple<bool, EdgeSide?>(true, EdgeSide.left);
-            }
-
-            return new Tuple<bool, EdgeSide?>(false, null);
+            return isTouching.Item2;
         }
 
         #endregion
 
         #region Static Methods
+
+        public static (bool isTouching, EdgeSide? touchingEdge) IsNodeTouchingNode(Node sourceNode, Node destinationNode)
+        {
+            var sourceIsVerticallyAligned = (
+                sourceNode.left <= destinationNode.right &&
+                sourceNode.right >= destinationNode.left
+            );
+
+            var sourceIsHorizontallyAligned = (
+                sourceNode.bottom >= destinationNode.top &&
+                sourceNode.top <= destinationNode.bottom
+            );
+
+            // Source Node's bottom is touching the Destination Node's top
+            if (sourceNode.bottom == destinationNode.top)
+            {
+                if (sourceIsVerticallyAligned)
+                {
+                    return new (true, EdgeSide.bottom);
+                }
+                
+            }
+
+            else if (sourceNode.top == destinationNode.bottom)
+            {
+                if (sourceIsVerticallyAligned)
+                {
+                    return new (true, EdgeSide.top);
+                }
+            }
+
+            else if (sourceNode.left == destinationNode.right)
+            {
+                if (sourceIsHorizontallyAligned)
+                {
+                    return new (true, EdgeSide.left);
+                }
+
+            }
+
+            else if (sourceNode.right == destinationNode.left)
+            {
+                if (sourceIsHorizontallyAligned)
+                {
+                    return new (true, EdgeSide.right);
+                }
+
+            }
+
+            return new (false, null);
+        }
 
         public static bool IsNodeBelowNode(Node sourceNode, Node destinationNode)
         {
@@ -406,9 +509,9 @@ namespace JSONCanvasDotNet.Models
             return sourceNode.left >= destinationNode.right;
         }
 
-        public static bool DoesNodeOverlapNode(Node firstNode, Node secondNode)
+        public static bool NodesOverlap(Node firstNode, Node secondNode)
         {
-            if (firstNode.boundingBox.IntersectsWith(secondNode.boundingBox))
+            if (firstNode.boundary.IntersectsWith(secondNode.boundary))
             {
                 return true;
             }
@@ -417,25 +520,36 @@ namespace JSONCanvasDotNet.Models
         }
 
         #endregion
+
+        #region Static Properties
+
+        [JsonIgnore]
+        public static int DefaultWidth = 200;
+
+        [JsonIgnore]
+        public static int DefaultHeight = 200;
+
+        #endregion
     }
+
     public class TextNode : Node
     {
         public TextNode(
-            int nodeX,
-            int nodeY,
-            int nodeWidth,
-            int nodeHeight,
-            string? nodeText = null,
-            string? nodeId = null
+            int x,
+            int y,
+            int width,
+            int height,
+            string? text = null,
+            string? id = null
         ) : base(
-            nodeX,
-            nodeY,
-            nodeWidth,
-            nodeHeight,
-            nodeId: nodeId
+            x,
+            y,
+            width,
+            height,
+            id: id
         )
         {
-            this.text = nodeText;
+            this.text = text;
         }
 
         [JsonInclude]
@@ -452,18 +566,18 @@ namespace JSONCanvasDotNet.Models
     {
         public FileNode(
             string filePath,
-            int nodeX,
-            int nodeY,
-            int nodeWidth,
-            int nodeHeight,
+            int x,
+            int y,
+            int width,
+            int height,
             string? subPath = null,
-            string? nodeId = null
+            string? id = null
         ) : base(
-            nodeX,
-            nodeY,
-            nodeWidth,
-            nodeHeight,
-            nodeId: nodeId
+            x,
+            y,
+            width,
+            height,
+            id: id
         )
         {
             this.file = filePath;
@@ -490,21 +604,21 @@ namespace JSONCanvasDotNet.Models
     public class LinkNode : Node
     {
         public LinkNode(
-            string nodeUrl,
-            int nodeX,
-            int nodeY,
-            int nodeWidth,
-            int nodeHeight,
-            string? nodeId = null
+            string url,
+            int x,
+            int y,
+            int width,
+            int height,
+            string? id = null
         ) : base(
-            nodeX,
-            nodeY,
-            nodeWidth,
-            nodeHeight,
-            nodeId: nodeId
+            x,
+            y,
+            width,
+            height,
+            id: id
         )
         {
-            this.url = nodeUrl;
+            this.url = url;
         }
 
         [JsonInclude]
@@ -519,28 +633,29 @@ namespace JSONCanvasDotNet.Models
     public class GroupNode : Node
     {
         public GroupNode(
-            int nodeX,
-            int nodeY,
-            int nodeWidth,
-            int nodeHeight,
-            string? nodeLabel = null,
-            string? nodeBackground = null,
-            GroupNodeBackgroundStyle? nodeBackgroundStyle = null,
-            string? nodeId = null
+            int x,
+            int y,
+            int width,
+            int height,
+            string? label = null,
+            string? background = null,
+            GroupNodeBackgroundStyle? backgroundStyle = null,
+            string? id = null
         ) : base(
-            nodeX,
-            nodeY,
-            nodeWidth,
-            nodeHeight,
-            nodeId: nodeId
+            x,
+            y,
+            width,
+            height,
+            id: id
         )
         {
-            this.label = nodeLabel;
+            this.label = label;
 
-            this.background = nodeBackground;
-            this.backgroundStyle = nodeBackgroundStyle;
+            this.background = background;
+            this.backgroundStyle = backgroundStyle;
 
             this.children = new List<Node>();
+            this.childLookup = new Dictionary<string, Node>();
         }
 
         [JsonInclude]
@@ -561,25 +676,92 @@ namespace JSONCanvasDotNet.Models
             get;
         }
 
-        public void AddChildNode(Node node, bool updateChildPosition = true)
+        [JsonIgnore]
+        public Dictionary<string, Node> childLookup
         {
-            if (this.Canvas == null && updateChildPosition)
+            get;
+        }
+
+        #region Instance Methods
+
+        public Node? AddOrGetChildNode(Node node)
+        {
+            if (node == this)
             {
-                throw new InvalidOperationException("Group Nodes must be on a Canvas to update a child node's position");
+                return null;
+            }
+
+            var result = this.childLookup.GetValueOrDefault(node.id);
+            if (result != null)
+            {
+                return result;
             }
 
             this.children.Add(node);
+            this.childLookup[node.id] = node;
 
             node.parentNode = this;
+            node.z = this.z + 1;
+
             node.Canvas = this.Canvas;
+
+            if (!this.Contains(node))
+            {
+                this.PlaceNodeInGroup(node);
+            }
+
+            return node;
         }
 
-        public bool Contains(Node node)
+        public Node PlaceNodeInGroup(Node node)
+        {
+            if (!this.NodeIsChild(node))
+            {
+                this.AddOrGetChildNode(node);
+            }
+            else
+            {
+                var place = this.FindSpaceForNode(node);
+                node.x = place.X;
+                node.y = place.Y;
+
+                this.ResizeForNode(node);
+            }
+
+            return node;
+        }
+
+        public (int X, int Y) FindSpaceForNode(Node node)
+        {
+            return GroupNode.FindSpaceInGroupForNode(this, node);
+        }
+
+        public bool NodeIsChild(Node node)
         {
             return this.children.Contains(node);
         }
 
-        public List<Node> ChildrenOverlappingBoundary(Rectangle proposedBoundingBox, bool ignoreGroupNodes = false)
+        public bool ContainsChildNode(Node node)
+        {
+            if (!this.NodeIsChild(node))
+            {
+                return false;
+            }
+
+            if (!this.Contains(node))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public List<Node> ChildrenOverlappingNode(Node node, bool ignoreGroupNodes = false)
+        {
+            return this.ChildrenOverlappingBoundary(node.boundary, ignoreGroupNodes);
+        }
+
+        public List<Node> ChildrenOverlappingBoundary(Rectangle proposedBoundary, bool ignoreGroupNodes = false)
         {
             List<Node> nodesOverlapping = new List<Node>();
             foreach (var node in this.children)
@@ -589,7 +771,7 @@ namespace JSONCanvasDotNet.Models
                     continue;
                 }
 
-                if (node.boundingBox.IntersectsWith(proposedBoundingBox))
+                if (node.Overlaps(proposedBoundary))
                 {
                     nodesOverlapping.Add(node);
                 }
@@ -599,8 +781,126 @@ namespace JSONCanvasDotNet.Models
             return nodesOverlapping;
         }
 
-        public static Tuple<int, int> FindSpaceInGroupForNode(GroupNode parent, Node child)
+        public void ResizeForNode(Node node)
         {
+            if (this.Contains(node))
+            {
+                return;
+            }
+            // We're going to aim for maintaining our current ratio of width to height
+            // The current Group Node presumably has its current size for a reason
+            // and while we're expanding it to make room, we want to make sure its
+            // shape is preserved
+            var sizeRatio = (double)this.width / (double)this.height;
+
+            // If the node's bottom is below ours (its Y value + height is a higher positive value)
+            // then the node is below our bounddary
+            // we'll adjust our height (implicitly adjusting our bottom)
+            // such that our bottom is at least 1 Margin lower
+            if (node.bottom > this.bottom)
+            {
+                this.height = (node.bottom - this.top) + Canvas.Margin;
+            }
+
+            // If the node's top is above our top, then its
+            // position is above our boundary
+            // So we'll resize _and_ move
+            // Resizing height only adjusts our bottom
+            // so to grow upward we need to move our Y
+            if (node.top < this.top)
+            {
+                var currentBottom = this.bottom;
+                var newTop = node.top - Canvas.Margin;
+                var newHeight = currentBottom - newTop;
+                this.height = newHeight;
+                this.y = newTop;
+            }
+
+            // Then use the ratio to determine the new width
+            this.width = (int)(sizeRatio * this.height);
+
+            // Now, we need to check to see if the node is 
+            // further left than us
+            // If so, we'll move and resize again
+            if (node.left < this.left)
+            {
+                var currentRight = this.right;
+                var newLeft = node.left - Canvas.Margin;
+                var newWidth = currentRight - newLeft;
+                this.width = newWidth;
+            }
+
+            // Finally, same as the node being below us, if it's to the right
+            // we just grow to encompass it
+            if (node.right > this.right)
+            {
+                this.width = (node.right - this.left) + Canvas.Margin;
+            }
+
+            // Then use the ratio to determine the new height
+            this.height = (int)(sizeRatio * this.width);
+
+            Console.WriteLine($"Resized Group Node to {this.width}x{this.height}");
+
+            this.ResizeForChildren();
+        }
+
+        public void ResizeForChildren()
+        {
+            foreach (var node in this.children)
+            {
+                if (!this.Contains(node))
+                {
+                    this.ResizeForNode(node);
+                }
+
+            }
+
+        }
+
+        public void AdjustZForChildren()
+        {
+            foreach (var node in this.children)
+            {
+                if (node.z != this.z + 1)
+                {
+                    node.z = this.z + 1;
+                }
+
+            }
+
+        }
+
+        #endregion
+
+        #region Static Methods
+        public static bool IsNodeAncestorOfNode(Node ancestor, Node node)
+        {
+            if (node.parentNode == ancestor)
+            {
+                return true;
+            }
+
+            var parent = node.parentNode;
+            while (parent != null)
+            {
+                parent = parent.parentNode;
+                if (parent == ancestor)
+                {
+                    return true;
+                }
+
+            }
+
+            return false;
+        }
+
+        public static (int X, int Y) FindSpaceInGroupForNode(GroupNode parent, Node child)
+        {
+
+            Rectangle proposedBoundary = new Rectangle(parent.left + Canvas.Margin, parent.top + Canvas.Margin, child.width, child.height);
+            bool nodePlaced = false;
+
             // Group Nodes contain other Nodes by virtue of their bounding box enclosing
             // the other Node (and also being earlier in the List of Nodes in the Canvas, but
             // we don't control that here)
@@ -609,28 +909,29 @@ namespace JSONCanvasDotNet.Models
             // and figure out where to put it
             // We also want to avoid overlapping with other nodes, since it'll be disruptive
             // visually _and_ we could accidentally place it into another Group Node
-            if (parent.OverlapsNode(child))
+            List<Node> overlappingNodes = parent.ChildrenOverlappingBoundary(proposedBoundary);
+
+            if (overlappingNodes.Count == 0)
             {
-                return child.topLeft;
+                if (parent.Contains(child))
+                {
+                    return child.topLeft;
+                }
+                else
+                {
+                    return (proposedBoundary.Left, proposedBoundary.Top);
+                }
             }
-
-            List<Node> overlappingNodes = new List<Node>();
-            
-            // Add a small margin of 8 units
-            int proposedNewY = parent.top + 8;
-            int proposedNewX = parent.left + 8;
-
-            Rectangle proposedBoundingBox = new Rectangle(proposedNewX, proposedNewY, child.width, child.height);
-            bool nodePlaced = false;
 
             while (!nodePlaced)
             {
-                proposedBoundingBox.X = proposedNewX;
-                proposedBoundingBox.Y = proposedNewY;
+                Console.WriteLine($"Proposed Position: ({proposedBoundary.X}, {proposedBoundary.Y})");
 
-                // Get any Nodes that overlap with our proposed bounding box
-                overlappingNodes = parent.ChildrenOverlappingBoundary(proposedBoundingBox);
-                    
+                // Get any Nodes that overlap with our proposed boundary, but aren't an ancestor
+                overlappingNodes = parent.ChildrenOverlappingBoundary(proposedBoundary).Where(x => !GroupNode.IsNodeAncestorOfNode(x, child)).ToList();
+
+                Console.WriteLine($"{overlappingNodes.Count} nodes overlap proposed position");
+
                 // We win!
                 if (overlappingNodes.Count == 0)
                 {
@@ -642,12 +943,12 @@ namespace JSONCanvasDotNet.Models
                 // So, we scoot to the right and try again
                 else
                 {
-                    // Of course, we have > 0 Nodes and one of them has a right side
-                    // that is farther than the rest
+                    // We're hunting for the farthest right node
+                    // so we set our Right to Int.Min and grab a node
                     Node farthestRightNode = overlappingNodes.First();
                     int farthestRightPosition = int.MinValue;
-                        
-                    // So we do a simple loop to find the max X position of the overlapping nodes
+
+                    // Then we do a simple loop to find the max X position of the overlapping nodes
                     // We can't guarantee that the vertical position is relevant
                     // i.e., one of the overlapping nodes could be above or below the center
                     // of the proposed bounding box, but we don't know if using one of their Y positions
@@ -665,23 +966,27 @@ namespace JSONCanvasDotNet.Models
                     }
 
                     // Now all we do is use the furthest right position and add a small margin
-                    proposedNewX = farthestRightNode.right + 8;
+                    proposedBoundary.X = farthestRightNode.right + Canvas.Margin;
+                    Console.WriteLine($"Farthest Right Node position is {farthestRightNode.right}");
                 }
 
                 // If we've hit the right end of the Group Node
                 // wrap around and bump down
-                if (proposedNewX + child.width > parent.right + 8)
+                if (proposedBoundary.Right > parent.right)
                 {
-                    proposedNewY += 8;
-                    proposedNewX = parent.left + 8;
+                    Console.WriteLine($"{proposedBoundary.Right} is outside the Group Node's right edge of {parent.right}");
+                    proposedBoundary.Y += Canvas.Margin;
+                    proposedBoundary.X = parent.left + Canvas.Margin;
+                    Console.WriteLine($"Wrapping around to ({proposedBoundary.X},{proposedBoundary.Y})");
                 }
 
                 // We've reached the bottom
                 // This means (if we've done everything right) there is no gap that can fit the node within the existing Group's
                 // boundary box
                 // We need to expand the Group Node to accomodate
-                if (proposedNewY + child.height > parent.bottom + 8)
+                if (proposedBoundary.Bottom > parent.bottom + Canvas.Margin)
                 {
+                    Console.WriteLine("Reached the bottom of the Group Node.");
                     // We're going to aim for maintaining the current ratio of width to height
                     // The Group Node presumably has its current size for a reason
                     // and while we're expanding it to make room, we want to make sure its
@@ -689,7 +994,7 @@ namespace JSONCanvasDotNet.Models
                     var sizeRatio = (double)parent.width / (double)parent.height;
 
                     // We'll increase the height
-                    var newHeight = parent.height + child.height + 16;
+                    var newHeight = parent.height + child.height + (Canvas.Margin * 2);
 
                     // we're converting double to int and will lose some precision but it's fine for now
                     var newWidth = (int)(sizeRatio * newHeight);
@@ -700,16 +1005,18 @@ namespace JSONCanvasDotNet.Models
 
                     // If the ratio created width to accomodate the child, we can put it in that column
                     // and start from the top
-                    if (addedWidth > child.width + 16)
+                    if (addedWidth > child.width + (Canvas.Margin * 2))
                     {
                         // parent.right is the current right border, before adding the new width
-                        proposedNewX = parent.right + 8;
-                        proposedNewY = parent.top + 8;
+                        proposedBoundary.X = parent.right + Canvas.Margin;
+                        proposedBoundary.Y = parent.top + Canvas.Margin;
                     }
                     else
                     {
-                        proposedNewX = parent.left + 8;
-                        proposedNewY = parent.bottom - child.height - 8;
+                        proposedBoundary.X = parent.left + Canvas.Margin;
+                        // parent.bottom is the _current_ bottom, but we're adding child.height + Canvas.Margin
+                        // meaning the current paren.bottom + Canvas.Margin will be empty on resizing
+                        proposedBoundary.Y = parent.bottom + Canvas.Margin;
                     }
 
                     nodePlaced = true;
@@ -718,39 +1025,12 @@ namespace JSONCanvasDotNet.Models
 
             }
 
-            return new Tuple<int, int>(proposedNewX, proposedNewY);
+            Console.WriteLine($"Node placed! ({proposedBoundary.X},{proposedBoundary.Y})");
 
+            return new (proposedBoundary.X, proposedBoundary.Y);
         }
 
-        public void ResizeForNode(Node node)
-        {
-            // We're going to aim for maintaining our current ratio of width to height
-            // The current Group Node presumably has its current size for a reason
-            // and while we're expanding it to make room, we want to make sure its
-            // shape is preserved
-            var sizeRatio = (double)this.width / (double)this.height;
-
-            // We'll increase the height
-            this.height += node.height + 16;
-            // Then use the ratio to determine the new width
-            this.width = (int)(sizeRatio * this.height);
-        }
-
-        public void CheckChildNodes()
-        {
-            foreach (var node in this.children)
-            {
-                if (!node.OverlapsNode(this) ||
-                    node.x > this.right ||
-                    node.y > this.bottom ||
-                    node.x < this.left ||
-                    node.y < this.top
-                )
-                {
-
-                }
-            }
-        }
+        #endregion
 
     }
 
