@@ -1,4 +1,5 @@
 ﻿using System.Drawing;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
@@ -19,6 +20,20 @@ namespace JSONCanvasDotNet.Models
         }
 
         #region Instance Methods
+        public string ToJson(JsonSerializerOptions? options = null)
+        {
+            if (options == null)
+            {
+                options = new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                };
+
+            }
+
+            return JsonSerializer.Serialize<Canvas>(this, options);
+        }
+
         public Node AddOrGetNode(string nodeId)
         {
             var existingNode = this.nodeLookup.GetValueOrDefault(nodeId);
