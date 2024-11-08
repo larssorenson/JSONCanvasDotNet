@@ -8,6 +8,7 @@ namespace JSONCanvasDotNet.Models
 
     public class Canvas
     {
+        [JsonConstructor]
         public Canvas(List<Node>? nodes = null, List<Edge>? edges = null)
         {
             this.Nodes = nodes ?? new List<Node>();
@@ -19,7 +20,52 @@ namespace JSONCanvasDotNet.Models
             this.AddOrGetEdges(this.Edges);
         }
 
+        /*[JsonConstructor]
+        public Canvas(List<Node> nodes, List<Edge> edges)
+        {
+            this.Nodes = new List<Node>(nodes);
+            this.AddOrGetNodes(this.Nodes);
+
+            this.Edges = new List<Edge>(edges);
+            this.AddOrGetEdges(this.Edges);
+        }*/
+
         #region Instance Methods
+        public bool RemoveNode(string nodeId)
+        {
+            var existingNode = this.nodeLookup.GetValueOrDefault(nodeId);
+            if (existingNode == null)
+            {
+                return false;
+            }
+
+            this.nodeLookup.Remove(nodeId);
+            if (existingNode.parentNode != null)
+            {
+                existingNode.parentNode.RemoveChildNode(existingNode);
+            }
+
+            this.AdjustBounds();
+
+            return true;
+
+        }
+        public bool RemoveNode(Node node)
+        {
+            return this.RemoveNode(node.id);
+        }
+
+        public bool RemoveNodes(List<Node> nodes)
+        {
+            bool allRemoved = true;
+            foreach (var node in nodes)
+            {
+                allRemoved &= this.RemoveNode(node);
+            }
+
+            return allRemoved;
+        }
+
         public string ToJson(JsonSerializerOptions? options = null)
         {
             if (options == null)
@@ -123,6 +169,8 @@ namespace JSONCanvasDotNet.Models
             {
                 foreach (var node in nodesContained)
                 {
+
+                    Console.WriteLine($"Adjusting Node {node.id} in Group Node {newNode.id}.");
                     this.PlaceNode(node);
                 }
 
@@ -130,6 +178,60 @@ namespace JSONCanvasDotNet.Models
 
             this.Nodes.Add(newNode);
             return newNode;
+        }
+
+        public TextNode AddTextNode(string? text = null)
+        {
+            Rectangle place = this.FindSpaceForNode();
+
+            var newNode = new TextNode(
+                x: place.X,
+                y: place.Y,
+                width: place.Width,
+                height: place.Height,
+                text: text
+            );
+            return (TextNode)this.AddOrGetNode(newNode);
+        }
+        public GroupNode AddGroupNode(string? label = null)
+        {
+            Rectangle place = this.FindSpaceForNode();
+
+            var newNode = new GroupNode(
+                x: place.X,
+                y: place.Y,
+                width: place.Width,
+                height: place.Height,
+                label: label
+            );
+            return (GroupNode)this.AddOrGetNode(newNode);
+        }
+        public FileNode AddFileNode(string path, string? subPath = null)
+        {
+            Rectangle place = this.FindSpaceForNode();
+
+            var newNode = new FileNode(
+                x: place.X,
+                y: place.Y,
+                width: place.Width,
+                height: place.Height,
+                filePath: path,
+                subPath: subPath
+            );
+            return (FileNode)this.AddOrGetNode(newNode);
+        }
+        public LinkNode AddLinkNode(string url)
+        {
+            Rectangle place = this.FindSpaceForNode();
+
+            var newNode = new LinkNode(
+                x: place.X,
+                y: place.Y,
+                width: place.Width,
+                height: place.Height,
+                url: url
+            );
+            return (LinkNode)this.AddOrGetNode(newNode);
         }
 
         public Rectangle AdjustBoundsForNode(Node node)
@@ -155,6 +257,46 @@ namespace JSONCanvasDotNet.Models
             }
 
             return this.boundary;
+        }
+
+        public Rectangle AdjustBounds()
+        {
+            int furthestLeft = int.MaxValue;
+            int furthestRight = int.MinValue;
+            int furthestTop = int.MaxValue;
+            int furthestBottom = int.MinValue;
+
+            foreach (var node in this.Nodes)
+            {
+                if (node.left < furthestLeft)
+                {
+                    furthestLeft = node.left;
+                }
+
+                if (node.right > furthestRight)
+                {
+                    furthestRight = node.right;
+                }
+
+                if (node.bottom > furthestBottom)
+                {
+                    furthestBottom = node.bottom;
+                }
+
+                if (node.top < furthestTop)
+                {
+                    furthestTop = node.top;
+                }
+
+            }
+
+            this.boundary.X = furthestLeft;
+            this.boundary.Y = furthestTop;
+            this.boundary.Height = furthestBottom - furthestTop;
+            this.boundary.Width = furthestRight - furthestLeft;
+
+            return this.boundary;
+
         }
 
         public Node PlaceNode(Node proposedNode)
@@ -201,6 +343,8 @@ namespace JSONCanvasDotNet.Models
 
         public Rectangle FindSpaceForBoundary(Rectangle boundary)
         {
+            // TODO: figure out why this isn't considering all possible overlapping nodes
+            // The bug may be in the Group Node placement logic and not here.
             bool nodePlaced = false;
             List<Node> nodesOverlapping = new List<Node>();
             Rectangle proposedBoundary = boundary;
@@ -383,11 +527,28 @@ namespace JSONCanvasDotNet.Models
                 }
                 return this.Nodes.OrderByDescending<Node, int>(node => node.z).ToList();
             }
+            set
+            {
+                this.Nodes.Clear();
+                this.Nodes.AddRange(value);
+            }
         }
+
+        private List<Edge> _edges;
 
         [JsonInclude]
         [JsonPropertyName("edges")]
-        public List<Edge> Edges;
+        public List<Edge> Edges {
+            get
+            {
+                return this._edges;
+            }
+            set
+            {
+                this._edges = value;
+                this.AddOrGetEdges(this.Edges);
+            }
+        }
 
         #endregion
 
@@ -400,7 +561,21 @@ namespace JSONCanvasDotNet.Models
         public Dictionary<string, Edge> edgeLookup = new Dictionary<string, Edge>();
 
         [JsonIgnore]
-        public List<Node> Nodes;
+        private List<Node> _nodes;
+
+        [JsonIgnore]
+        public List<Node> Nodes
+        {
+            get
+            {
+                return this._nodes;
+            }
+            set
+            {
+                this._nodes = value;
+                this.AddOrGetNodes(this.Nodes);
+            }
+        }
 
         [JsonIgnore]
         public Rectangle boundary = new Rectangle();
@@ -410,6 +585,28 @@ namespace JSONCanvasDotNet.Models
         #region Static Fields
 
         public static int Margin = 10;
+
+        public static Canvas FromJsonString(string json)
+        {
+            var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            options.IncludeFields = true;
+            options.PropertyNameCaseInsensitive = true;
+            var canvas = JsonSerializer.Deserialize<Canvas>(json, options);
+            if (canvas == null)
+            {
+                throw new ArgumentException("Invalid JSON Canvas string provided!");
+            }
+
+            return canvas;
+        }
+
+        public static Canvas FromJsonFile(string filePath)
+        {
+            string json = File.ReadAllText(filePath);
+
+            return Canvas.FromJsonString(json);
+            
+        }
 
         #endregion
     }
