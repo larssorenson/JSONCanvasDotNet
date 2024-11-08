@@ -1,0 +1,21 @@
+{
+  "title": "JSON Canvas",
+  "description": "An open source spec describing a JSON format to provide longevity, readability, interoperability, and extensibility to data created with infinite canvas apps.",
+  "type": "object",
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "description": "An array of Nodes.",
+      "items": {
+        "type":  "object"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "An array of Edges, each connecting 2 Nodes.",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

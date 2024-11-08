@@ -46,11 +46,20 @@ namespace JSONCanvasDotNet.Models
 
         #region JSON fields
 
+        [JsonIgnore]
+        private string _id;
+
         [JsonInclude]
         public string id
         {
-            get;
-            set;
+            get
+            {
+                return this._id;
+            }
+            set
+            {
+                this._id = value;
+            }
         }
 
         [JsonIgnore]
@@ -524,10 +533,10 @@ namespace JSONCanvasDotNet.Models
         #region Static Properties
 
         [JsonIgnore]
-        public static int DefaultWidth = 200;
+        public static int DefaultWidth = 250;
 
         [JsonIgnore]
-        public static int DefaultHeight = 200;
+        public static int DefaultHeight = 60;
 
         #endregion
     }
@@ -537,8 +546,8 @@ namespace JSONCanvasDotNet.Models
         public TextNode(
             int x,
             int y,
-            int width,
-            int height,
+            int? width = null,
+            int? height = null,
             string? text = null,
             string? id = null
         ) : base(
@@ -550,6 +559,21 @@ namespace JSONCanvasDotNet.Models
         )
         {
             this.text = text;
+        }
+
+        public TextNode(
+            Rectangle boundary,
+            string? text = null,
+            string? id = null
+        ) : this(
+            x: boundary.X,
+            y: boundary.Y,
+            width: boundary.Width,
+            height: boundary.Height,
+            id: id,
+            text: text
+        )
+        {
         }
 
         [JsonInclude]
@@ -565,11 +589,11 @@ namespace JSONCanvasDotNet.Models
     public class FileNode : Node
     {
         public FileNode(
-            string filePath,
             int x,
             int y,
-            int width,
-            int height,
+            string filePath,
+            int? width = null,
+            int? height = null,
             string? subPath = null,
             string? id = null
         ) : base(
@@ -582,6 +606,23 @@ namespace JSONCanvasDotNet.Models
         {
             this.file = filePath;
             this.subpath = subPath;
+        }
+
+        public FileNode(
+            Rectangle boundary,
+            string filePath,
+            string? subPath = null,
+            string? id = null
+        ) : this(
+            x: boundary.X,
+            y: boundary.Y,
+            width: boundary.Width,
+            height: boundary.Height,
+            id: id,
+            filePath: filePath,
+            subPath: subPath
+        )
+        {
         }
 
         [JsonInclude]
@@ -604,11 +645,11 @@ namespace JSONCanvasDotNet.Models
     public class LinkNode : Node
     {
         public LinkNode(
-            string url,
             int x,
             int y,
-            int width,
-            int height,
+            string url,
+            int? width = null,
+            int? height = null,
             string? id = null
         ) : base(
             x,
@@ -619,6 +660,21 @@ namespace JSONCanvasDotNet.Models
         )
         {
             this.url = url;
+        }
+
+        public LinkNode(
+            Rectangle boundary,
+            string url,
+            string? id = null
+        ) : this(
+            x: boundary.X,
+            y: boundary.Y,
+            width: boundary.Width,
+            height: boundary.Height,
+            id: id,
+            url: url
+        )
+        {
         }
 
         [JsonInclude]
@@ -635,8 +691,8 @@ namespace JSONCanvasDotNet.Models
         public GroupNode(
             int x,
             int y,
-            int width,
-            int height,
+            int? width = null,
+            int? height = null,
             string? label = null,
             string? background = null,
             GroupNodeBackgroundStyle? backgroundStyle = null,
@@ -656,6 +712,25 @@ namespace JSONCanvasDotNet.Models
 
             this.children = new List<Node>();
             this.childLookup = new Dictionary<string, Node>();
+        }
+
+        public GroupNode(
+            Rectangle boundary,
+            string? label = null,
+            string? background = null,
+            GroupNodeBackgroundStyle? backgroundStyle = null,
+            string? id = null
+        ) : this(
+            x: boundary.X,
+            y: boundary.Y,
+            width: boundary.Width,
+            height: boundary.Height,
+            id: id,
+            label: label,
+            background: background,
+            backgroundStyle: backgroundStyle
+        )
+        {
         }
 
         [JsonInclude]
@@ -684,11 +759,80 @@ namespace JSONCanvasDotNet.Models
 
         #region Instance Methods
 
-        public Node? AddOrGetChildNode(Node node)
+        public TextNode AddTextNode(string? text = null)
+        {
+            if (this.Canvas == null)
+            {
+                throw new InvalidOperationException("Cannot add a new node to a Group Node that lacks a Canvas.");
+            }
+            var newNode = this.Canvas.AddTextNode(text);
+            newNode = (TextNode)this.AddOrGetChildNode(newNode);
+
+            return newNode;
+        }
+
+        public TextNode AddTextNode(TextNode node)
+        {
+            return (TextNode)this.AddOrGetChildNode((Node)node);
+        }
+
+        public LinkNode AddLinkNode(string url)
+        {
+            if (this.Canvas == null)
+            {
+                throw new InvalidOperationException("Cannot add a new node to a Group Node that lacks a Canvas.");
+            }
+            var newNode = this.Canvas.AddLinkNode(url);
+            newNode = (LinkNode)this.AddOrGetChildNode(newNode);
+
+            return newNode;
+        }
+
+        public LinkNode AddLinkNode(LinkNode node)
+        {
+            return (LinkNode)this.AddOrGetChildNode((Node)node);
+        }
+
+        public GroupNode AddGroupNode(string? label = null)
+        {
+            if (this.Canvas == null)
+            {
+                throw new InvalidOperationException("Cannot add a new node to a Group Node that lacks a Canvas.");
+            }
+            var newNode = this.Canvas.AddGroupNode(label);
+            newNode = (GroupNode)this.AddOrGetChildNode(newNode);
+
+            return newNode;
+        }
+
+        public GroupNode AddGroupNode(GroupNode node)
+        {
+            return (GroupNode)this.AddOrGetChildNode((Node)node);
+        }
+
+        public FileNode AddFileNode(string path, string? subPath = null)
+        {
+            if (this.Canvas == null)
+            {
+                throw new InvalidOperationException("Cannot add a new node to a Group Node that lacks a Canvas.");
+            }
+            var newNode = this.Canvas.AddFileNode(path: path, subPath: subPath);
+            newNode = (FileNode)this.AddOrGetChildNode(newNode);
+
+            return newNode;
+        }
+
+        public FileNode AddFileNode(FileNode node)
+        {
+            return (FileNode)this.AddOrGetChildNode((Node)node);
+        }
+
+        public Node AddOrGetChildNode(Node node)
         {
             if (node == this)
             {
-                return null;
+                // TODO: Maybe just return node, essentially a no-op?
+                throw new InvalidOperationException("Cannot add or retrieve a node as a child of itself");
             }
 
             var result = this.childLookup.GetValueOrDefault(node.id);
@@ -710,7 +854,13 @@ namespace JSONCanvasDotNet.Models
                 this.PlaceNodeInGroup(node);
             }
 
+            if (this.Canvas != null)
+            {
+                return this.Canvas.AddOrGetNode(node);
+            }
+
             return node;
+
         }
 
         public Node PlaceNodeInGroup(Node node)
@@ -734,6 +884,20 @@ namespace JSONCanvasDotNet.Models
         public (int X, int Y) FindSpaceForNode(Node node)
         {
             return GroupNode.FindSpaceInGroupForNode(this, node);
+        }
+
+        public bool RemoveChildNode(Node node)
+        {
+            if (!NodeIsChild(node))
+            {
+                return false;
+            }
+
+            var childNode = this.AddOrGetChildNode(node);
+            this.children.Remove(childNode);
+            this.childLookup.Remove(childNode.id);
+
+            return true;
         }
 
         public bool NodeIsChild(Node node)
@@ -842,7 +1006,15 @@ namespace JSONCanvasDotNet.Models
 
             Console.WriteLine($"Resized Group Node to {this.width}x{this.height}");
 
-            this.ResizeForChildren();
+            this.ResizeParent();
+        }
+
+        public void ResizeParent()
+        {
+            if (this.parentNode  != null)
+            {
+                this.parentNode.ResizeForNode(this);
+            }
         }
 
         public void ResizeForChildren()
